@@ -1,33 +1,38 @@
-import { Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
+/* eslint-disable no-var */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable prettier/prettier */
+import { Body, Controller, Delete, Get, HttpException, HttpStatus, Param, ParseIntPipe, Post, Put } from '@nestjs/common';
 import { TaskService } from './tasks.service';
 
 @Controller('api/task')
 export class TaskController {
-  constructor(private readonly taskSvc: TaskService) {}
-
-  // ? http://localhost:3000/api/task
+  constructor(private readonly taskSvc: TaskService) { }
   @Get()
-  public fetchTasks(): string[] {
+  public fetchTasks(): any {
     return this.taskSvc.getTasks();
   }
 
-  @Get(':id')
-  public getTaskById(@Param('id') id: number): any {
-    return this.taskSvc.getTaskById(id);
-  }
+  /** !GET http:localhost:3000/api/task/1 */
+  @Get(":id")
+  public getTaskById(@Param("id", ParseIntPipe) id: number): any {
+    var task = this.taskSvc.getTaskById(id);
+    if (task) return task;
 
+    else throw new HttpException('Task not found', HttpStatus.NOT_FOUND);
+    
+
+  }
+  /** !POST GET http:localhost:3000/api/task*/
   @Post()
-  public insertTask(task: any): any {
+  public insertTask(@Body() task: any): any {
     return this.taskSvc.insertTask(task);
   }
-
-  @Put()
-  public updateTask(id: number, task: any): any {
+  @Put(":id")
+  public updateTask(@Body("id", ParseIntPipe) id: number, task: any): any {
     return this.taskSvc.updateTask(id, task);
   }
-
   @Delete()
-  public deleteTask(id: number): any {
+  public deleteTask(@Param("id", ParseIntPipe) id: number): any {
     return this.taskSvc.deleteTask(id);
   }
 }
