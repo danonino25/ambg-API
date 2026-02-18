@@ -1,45 +1,48 @@
+import { Query } from './../../../node_modules/@types/pg/index.d';
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable prettier/prettier */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { CreateTaskDto } from '../auth/dto/create-task.dbo';
+import { Client } from 'pg';
 
 @Injectable()
 export class TaskService {
+
+  constructor(@Inject('DATABASE_CONNECTION') private databaseConnection: Client) {
+
+  }
+
   private tasks: any[] = [];
 
-  public getTasks(): any[] {
-    return this.tasks;
+  public async getTasks(): Promise<any[]> {
+    const query = 'SELECT * FROM task';
+    const result = await this.databaseConnection.query(query);
+    return result.rows;
   }
 
-  public getTaskById(id: number): any {
-    const task = this.tasks.find((data) => data.id == id);
-    return task;
+  public async getTaskById(id: number): Promise<any> {
+    const query = 'SELECT * FROM task WHERE id = $1';
+    const result = await this.databaseConnection.query(query, [id]);
+    return result.rows[0];
   }
 
-  public insertTask(task: CreateTaskDto): any {
-    const id = this.tasks.length + 1;
-    const position = this.tasks.push({ ...task, id });
-    return this.tasks[position - 1];
+  public async insertTask(task: CreateTaskDto): Promise<any> {
+    const query = 'INSERT INTO task(name, description, priority, user_id) VALUES($1, $2, $3, $4) RETURNING *';
+    const result = await this.databaseConnection.query(query, [task.name, task.description, task.priority, task.user_id]);
+    return result.rows;
   }
 
-  public updateTask(id: number, task: any): any {
-    const taskUpdated = this.tasks.map((data) => {
-      if (data.id == id) {
-        if(task.name) data.name = task.name; 
-        if(task.description) data.description = task.description; 
-        if(task.priority != null) data.priority = task.priority; 
-
-        return data;
-      }
-    });
-    return taskUpdated;
+  public async updateTask(id: number, task: any): Promise<any>{
+        const query = 'UPDATE task SET name = $1, description = $2, priority = $3 WHERE id = $4 RETURNING *';
+        const result = await this.databaseConnection.query(query, [task.name, task.description, task.priority, id]);
+        return result.rows[0];
   }
 
-  public deleteTask(id: number): any {
-    const array= this.tasks.filter((data) => data.id != id);
-    this.tasks = array;
+  public async deleteTask(id: number): Promise<any> {
+    const query = 'DELETE FROM task WHERE id = $1';
+    await this.databaseConnection.query(query, [id]);
     return 'Task Deleted';
   }
 }

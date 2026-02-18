@@ -4,5 +4,6 @@ import { TaskModule } from './modules/tasks/tasks.module';
 
 @Module({
   imports: [AuthModule, TaskModule],
+  
 })
 export class AppModule {}
