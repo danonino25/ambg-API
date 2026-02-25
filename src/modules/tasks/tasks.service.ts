@@ -6,6 +6,8 @@ import { Query } from './../../../node_modules/@types/pg/index.d';
 import { Inject, Injectable } from '@nestjs/common';
 import { CreateTaskDto } from '../auth/dto/create-task.dbo';
 import { Client } from 'pg';
+import { Task } from '../auth/entities/task.entity';
+import { UpdateTaskDto } from '../auth/dto/update_task.dto';
 
 @Injectable()
 export class TaskService {
@@ -22,7 +24,7 @@ export class TaskService {
     return result.rows;
   }
 
-  public async getTaskById(id: number): Promise<any> {
+  public async getTaskById(id: number): Promise<Task> {
     const query = 'SELECT * FROM task WHERE id = $1';
     const result = await this.databaseConnection.query(query, [id]);
     return result.rows[0];
@@ -34,15 +36,21 @@ export class TaskService {
     return result.rows;
   }
 
-  public async updateTask(id: number, task: any): Promise<any>{
-        const query = 'UPDATE task SET name = $1, description = $2, priority = $3 WHERE id = $4 RETURNING *';
-        const result = await this.databaseConnection.query(query, [task.name, task.description, task.priority, id]);
-        return result.rows[0];
+  public async updateTask(id: number, taskUpdated: UpdateTaskDto): Promise<any>{
+    const task = await this.getTaskById(id);
+    task.name = taskUpdated.name ?? task.name;
+    task.description = taskUpdated.description ?? task.description;
+    task.priority = taskUpdated.priority ?? task.priority;
+
+    const query = 'UPDATE task SET name = $1, description = $2, priority = $3 WHERE id = $4 RETURNING *';
+    const result = await this.databaseConnection.query(query, [taskUpdated.name, taskUpdated.description, taskUpdated.priority, id]);
+    
+    return result.rows[0];
   }
 
-  public async deleteTask(id: number): Promise<any> {
-    const query = 'DELETE FROM task WHERE id = $1';
-    await this.databaseConnection.query(query, [id]);
-    return 'Task Deleted';
+  public async deleteTask(id: number): Promise<boolean> {
+    const sql = 'DELETE FROM task WHERE id = $1';
+    const result = await this.databaseConnection.query(sql, [id]);
+    return result.rowCount !> 0;
   }
 }
