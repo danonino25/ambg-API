@@ -7,6 +7,9 @@ export class AuthController {
 
   @Get('1')
   public logIn(): string {
+    
     return this.authSvc.logIn();
   }
+
+
 }
