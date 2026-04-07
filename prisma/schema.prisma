@@ -24,3 +24,16 @@ model Task {
   userId Int
   user User @relation(fields: [userId], references: [id])
 }
+
+model logs{
+  id Int @id @default (autoincrement())
+  statusCode Int
+  timestamp DateTime
+  path String @db.Text
+  error String @db.Text
+  errorCode String @db.Text
+
+  session_id Int?
+
+  user User? @relation (fields: [session_id], references: [id])
+}

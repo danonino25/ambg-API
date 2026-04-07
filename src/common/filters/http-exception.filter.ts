@@ -22,6 +22,8 @@ export class    AllExceptionFilter implements ExceptionFilter{
        ? exception.getResponse()
        : 'Internal Server Error';
 
+       // git commit -a -m "fix: Almacenamiento de logs"
+        //FIXE: Almacenar la informacion en la base de datos 
        response.status(status).json({
          statusCode: status,
          timeStamp: new Date().toISOString(),
