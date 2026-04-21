@@ -1,6 +1,12 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable prettier/prettier */
-import { IsBoolean, IsInt, IsNotEmpty, IsNumber, IsString, MaxLength, MinLength } from "class-validator";
+import {
+  IsNotEmpty,
+  IsString,
+  IsBoolean,
+  MinLength,
+  MaxLength,
+  IsNumber,
+  IsInt,
+} from 'class-validator';
 
 export class CreateTaskDto {
   @IsString()
@@ -19,6 +25,5 @@ export class CreateTaskDto {
   @IsNotEmpty()
   priority: boolean;
 
-  
-  user_id: number;
+  userId: number;
 }

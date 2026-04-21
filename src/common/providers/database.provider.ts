@@ -1,3 +1,4 @@
+
 import { Client } from 'pg';
 
 
@@ -9,7 +10,7 @@ export const databaseProvider = [
         host: 'localhost',
         port: 5432, 
         user: 'postgres',
-        password: 'postgres',
+        password: '1234',
         database: 'mi_base',
       });
       await client.connect();

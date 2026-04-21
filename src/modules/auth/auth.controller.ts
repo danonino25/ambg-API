@@ -1,92 +1,137 @@
-import { Controller, Get, HttpStatus, Post, HttpCode, Body, UnauthorizedException, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Res,
+  Req,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthService } from './auth.service';
+import { AuthDTO } from './dto/auth.dto';
 import { ApiOperation } from '@nestjs/swagger';
-import { AuthDto } from './dto/auth/auth.dto';
-import { UtilService } from 'src/common/services/util.service';
-import { AuthGuard } from 'src/common/guards/auth.guard';
+import { JwtService } from '@nestjs/jwt';
+import { UtilService } from '../../common/services/util.service';
+import { AuthGuard } from '../../common/guards/auth.guard';
+import { AppException } from '../../common/exceptions/app.exception';
 
-@Controller('api/auth')
+@Controller('/api/auth')
 export class AuthController {
-  constructor(private readonly authSvc: AuthService,
-    private readonly utilSvc: UtilService
-  ) { }
+  constructor(
+    private readonly authSvc: AuthService,
+    private readonly util: UtilService,
+  ) {}
 
-  // POST /register 200
-  @Post("login")
+  @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verifica las credenciales y genera un JWT' })
-  public async logIn(@Body() auth: AuthDto): Promise<any> {
+  @ApiOperation({ summary: 'Verifica las credenciales y crea un JWT' })
+  public async login(@Body() auth: AuthDTO, @Res({ passthrough: true }) res: Response): Promise<any> {
     const { username, password } = auth;
 
-    const user = await this.authSvc.getUserByUsername(username);
+    // Verificar usuario y constraseña
+    const user = await this.authSvc.getUserByUserName(username);
     if (!user)
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException(`El usuario no está registrado`);
 
-    if (await this.utilSvc.checkPassword(password, user.password!)) {
-
+    if (await this.util.checkPassword(password, user.password!)) {
+      //obtener informacion de payload
       const { password, ...payload } = user;
 
-      //FIXME: Generar refresh token por 7d
-      const refresh = await this.utilSvc.generateJwt(payload, '7d');
-      const hashRT = await this.utilSvc.hash(refresh);
-     
-      const updateUser = await this.authSvc.updateHash(user.id, hashRT)
+      //generar refres token por 7d
+      const refresh = await this.util.generateJWT(payload, '7d');
+      const hashRT = await this.util.hash(refresh);
+      await this.authSvc.updateHash(payload.id, hashRT);
 
-      //Obtener token de acceso por 60s
-      payload.hash = hashRT
-      const jwt = await this.utilSvc.generateJwt(payload, '60s');
-      return { 
-         access_token: jwt, 
-         refresh_token: hashRT
-     };
+      //generar token de acceso 60s
+      payload.hash = hashRT;
+      const jwt = await this.util.generateJWT(payload, '1h');
 
+      // Configurar cookies seguras
+      res.cookie('at', jwt, {
+        httpOnly: true,
+        secure: false, // Cambiar a true en producción con HTTPS
+        sameSite: 'lax',
+        maxAge: 3600000 // 1 hora
+      });
+
+      res.cookie('rt', hashRT, {
+        httpOnly: true,
+        secure: false, // Cambiar a true en producción con HTTPS
+        sameSite: 'lax',
+        maxAge: 604800000 // 7 días
+      });
+
+      return {
+        message: 'Login exitoso',
+        user: payload
+      };
     } else {
-      throw new UnauthorizedException('Credenciales inválidas');
+      throw new UnauthorizedException(`Usuario y/o contraseña es  incorrecto`);
     }
   }
 
-
-
-
-  @ApiOperation({ summary: 'Extrae el ID del usuario desde el token y busca la información' })
-  @Get("me")
-  public async getProfile(@Req() request: any) {
-       return user;
-  }
-
-
-  @Post("refresh")
+  @Get('me')
+  @UseGuards(AuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'obtiene el perfil del usuario autenticado' })
+  public async getProfile(@Req() request: any) {
+    const userSession = request['user'];
+    const user = await this.authSvc.getUserById(userSession.id);
+
+    if (user) {
+      const { password, ...userData } = user;
+      return userData;
+    }
+
+    return userSession;
+  }
+
+  @Post('refresh')
   @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Recibe un "Refresh Token", valida que no haya expirado y entrega un nuevo  "Access Token "' })
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresca el token JWT' })
   public async refreshToken(@Req() request: any) {
+    //Obtener usuario en sesion
+    const userSession = request['user'];
+    const user = await this.authSvc.getUserById(userSession.id);
 
-       // Obtener el usuario en sesion
-      const userSession = request ['user'];
-      const user = await this.authSvc.getUserById(userSession.id);
-      if (!user || !user.hash) throw new AppException('Acceso Denegado', HttpStatus.FORBIDDEN, '0')
+    if (!user || !user.hash)
+      throw new AppException('Acceso Denegado', HttpStatus.FORBIDDEN, '0');
 
-        console.log(userSession.hash);
-       // Compara el token recibido con el token guardado
+    //comparar el token recibido con el guardado
+    if (userSession.hash != user.hash)
+      throw new AppException('Acceso Denegado', HttpStatus.FORBIDDEN, '0');
 
-      if ( userSession.hash != user.hash)throw new AppException('Token invalido', HttpStatus.FORBIDDEN, '0')
-       console.log(user)
-
-       // Si el token es valido se egeneran nuevos tokens
-       return {
-        token: '',
-        refreshToken: ''
-       }
+    //si el token es valido se generan nuevos tokens
+    return {
+      token: '',
+      refresh_token: '',
+    };
   }
 
-  @Post("logout")
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(AuthGuard)
-  @ApiOperation({ summary: 'Invalida los tokens en el lado del servidor y limpia las cookies' })
-  public async logout(@Req() request: any,) {
-     const session = request['user'];
-      const user =  await this.authSvc.updateHash(session.id, null);
-      return user;
-  }
+ @Post('logout')
+@HttpCode(HttpStatus.NO_CONTENT)
+public async logout(@Req() request: any, @Res({ passthrough: true }) res: Response) {
+  try {
+    const session = request['user'];
 
+    if (session?.id) {
+      await this.authSvc.updateHash(session.id, null);
+    }
+
+    res.clearCookie('at');
+    res.clearCookie('rt');
+
+    return;
+  } catch (error) {
+    res.clearCookie('at');
+    res.clearCookie('rt');
+    return;
+  }
+}
 }
