@@ -25,12 +25,12 @@ export class AuthService {
     });
   }
 
-  public async updateHash(user_Id: number, hash: string | null): Promise<User> {
-    return await this.prisma.user.update({
-      where: { id: user_Id },
-      data: { hash },
-    });
-  }
+ public async updateHash(user_Id: number, hash: string): Promise<User> {
+  return await this.prisma.user.update({
+    where: { id: user_Id },
+    data: { password: hash }, 
+  });
+}
 
   public logIn(): string {
     return 'Login exitoso';

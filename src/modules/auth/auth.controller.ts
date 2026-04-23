@@ -121,7 +121,7 @@ public async logout(@Req() request: any, @Res({ passthrough: true }) res: Respon
     const session = request['user'];
 
     if (session?.id) {
-      await this.authSvc.updateHash(session.id, null);
+      await this.authSvc.updateHash(session.id, '');
     }
 
     res.clearCookie('at');

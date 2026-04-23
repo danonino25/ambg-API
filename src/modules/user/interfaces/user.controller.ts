@@ -16,96 +16,83 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
-import { User } from '../entities/user.entity';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../../../common/guards/auth.guard';
+import { RolesGuard } from '../../../common/guards/roles.guard'; // Importar el nuevo Guard
+import { Roles } from '../../auth/decorators/roles.decorator';// Importar el nuevo Decorador
+import { Role } from '@prisma/client';
 
 @ApiTags('Usuarios')
 @Controller('/api/user')
 export class UserController {
   constructor(private readonly userSvc: UserService) {}
 
-  @UseGuards(AuthGuard)
+  // REQUISITO: El admin puede ver todos los usuarios
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
   @Get()
-  @ApiOperation({ summary: 'Obtiene una lista de todos los usuarios' })
   public async getUsers(@Req() request: any): Promise<any[]> {
-    var { id } = request['user'];
-
-    return await this.userSvc.getUsers(id);
+    // Extraemos el ID del usuario que hace la petición (auditoría)
+    const { id } = request.user; 
+    return await this.userSvc.getUsers(id); // Pasamos el ID que el servicio está pidiendo
   }
 
-  @UseGuards(AuthGuard)
+  // REQUISITO: Ver un usuario específico (Solo Admin o el mismo usuario)
+  @UseGuards(AuthGuard, RolesGuard)
   @Get(':id')
   public async getUserById(
     @Param('id', ParseIntPipe) id: number,
-  ): Promise<User> {
+    @Req() request: any
+  ): Promise<any> {
+    const currentUser = request['user'];
+    if (currentUser.role !== Role.ADMIN && currentUser.id !== id) {
+      throw new HttpException('No tienes permisos para ver este perfil', HttpStatus.FORBIDDEN);
+    }
     const user = await this.userSvc.getUserById(id);
-
-    if (user) return user;
-    else throw new HttpException(`Usuario no encontrado`, 404);
-  }
-
-  @UseGuards(AuthGuard)
-  @Get('/get-user-by-username/:username')
-  public async getUserByUsername(
-    @Param('username') username: string,
-  ): Promise<User | null> {
-    const user = await this.userSvc.getUserByUsername(username);
-
-    if (user) return user;
-    else throw new HttpException(`Usuario no encontrado`, 404);
-  }
-
-  @Get('/check-username/:username')
-  @ApiOperation({ summary: 'Verifica si un username ya existe (Público)' })
-  public async checkUsername(@Param('username') username: string): Promise<{ available: boolean }> {
-    const user = await this.userSvc.getUserByUsername(username);
-    return { available: !user };
+    if (!user) throw new HttpException(`Usuario no encontrado`, 404);
+    return user;
   }
 
   @Post('/insert-user')
-  @ApiOperation({ summary: 'Crea un nuevo usuario (Público)' })
+  @ApiOperation({ summary: 'Registro para user ordinario (Público)' })
   public async insertUser(@Body() user: CreateUserDto): Promise<any> {
+    // Aquí el servicio debe validar si el username ya existe (Requisito: Mejora validación)
     return await this.userSvc.insertUser(user);
   }
 
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, RolesGuard)
   @Put(':id')
+  @ApiOperation({ summary: 'Actualizar usuario (Admin o dueño)' })
   public async updateUser(
     @Param('id', ParseIntPipe) id: number,
     @Body() user: UpdateUserDto,
     @Req() request: any,
   ): Promise<any> {
     const currentUser = request['user'];
-    if (currentUser.id !== id) {
-      throw new HttpException(
-        'No tienes permisos para editar otros usuarios',
-        HttpStatus.FORBIDDEN,
-      );
+    // Solo el Admin o el mismo usuario pueden editar
+    if (currentUser.role !== Role.ADMIN && currentUser.id !== id) {
+      throw new HttpException('No tienes permisos para editar otros usuarios', HttpStatus.FORBIDDEN);
     }
     return await this.userSvc.updateUser(id, user);
   }
 
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles(Role.ADMIN) 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
   public async deleteUser(
     @Param('id', ParseIntPipe) id: number,
-    @Req() request: any,
+    @Req() req: any 
   ): Promise<boolean> {
-    const currentUser = request['user'];
-    if (currentUser.id !== id) {
-      throw new HttpException(
-        'No tienes permisos para eliminar otros usuarios',
-        HttpStatus.FORBIDDEN,
-      );
-    }
-
     try {
-      await this.userSvc.deleteUser(id);
+      // 1. Aquí extraes el ID. Si TypeScript te obliga a usar ID, déjalo así:
+      const adminId = req.user.ID || req.user.id || req.user.sub; 
+
+      // 2. USA la variable adminId que acabas de crear
+      await this.userSvc.deleteUser(id, adminId);
+      
       return true;
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
+    } catch (error: any) {
       throw new HttpException(
         error.message || `Error al eliminar usuario`,
         HttpStatus.INTERNAL_SERVER_ERROR,

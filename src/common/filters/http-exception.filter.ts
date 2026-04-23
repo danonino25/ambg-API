@@ -7,11 +7,11 @@ import { PrismaService } from '../services/prisma.service';
 export class AllExceptionFilter implements ExceptionFilter {
   constructor(private readonly prisma: PrismaService) {}
 
-  async catch(exception: any, host: ArgumentsHost) {
+  async catch(exception:unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
-
+    const response = ctx.getResponse();
+    const request = ctx.getRequest<any>();
+    const userId = request.user?.id || null;
   
     let status = exception instanceof HttpException 
       ? exception.getStatus() 
@@ -48,11 +48,13 @@ export class AllExceptionFilter implements ExceptionFilter {
       await (this.prisma as any).logs.create({
         data: {
           statusCode: status,
+          timestamp: new Date(),
           path: request.url,
-          error: errorContent,
-          errorCode: String(errorCode),
-          session_id: sessionId,
-          timestamp: new Date()
+          error: message,
+          errorCode: 'INTERNAL_ERROR',
+          session_id: request.user?.id || null, 
+          action: 'ERROR_SISTEMA',
+          description: `Error detectado en la ruta ${request.url}`
         },
       });
     } catch (dbError: any) {
